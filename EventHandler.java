@@ -18,21 +18,20 @@ import java.util.*;
 
 public class EventHandler implements StreamRequestHandler {
 
-    private static String ossEndpoint = "YourOSSEndpoint";
-    private static String openSearchAppName = "YourOpenSearchAppName";
-    private static String openSearchHost = "YourOpenSearchHost";
-    private static String openSearchTableName = "YourOpenSearchTableName";
-    private static String accessKeyId = "YourAccessKeyId";
-    private static String accessKeySecret = "YourAccessSecretId";
-    private static String docUrlFormat = "http://%s.%s/%s";
+    private static final String OSS_ENDPOINT = "YourOSSEndpoint";
+    private static final String OPENSEARCH_APP_NAME = "YourOpenSearchAppName";
+    private static final String OPENSEARCH_HOST = "YourOpenSearchHost";
+    private static final String OPENSEARCH_TABLE_NAME = "YourOpenSearchTableName";
+    private static final String ACCESS_KEY_ID = "YourAccessKeyId";
+    private static final String ACCESS_KEY_SECRET = "YourAccessSecretId";
+    private static final String DOC_URL_FORMAT = "http://%s.%s/%s";
 
-    private static String[] addEventArray = {"ObjectCreated:PutObject", "ObjectCreated:PostObject"};
-    private static List<String> addEventList = Arrays.asList(addEventArray);
-    private static String[] updateEventArray = {"ObjectCreated:AppendObject"};
-    private static List<String> updateEventList = Arrays.asList(updateEventArray);
-    private static String[] deleteEventArray = {"ObjectRemoved:DeleteObject", "ObjectRemoved:DeleteObjects"};
-    private static List<String> deleteEventList = Arrays.asList(deleteEventArray);
-
+    private static final List<String> addEventList = Arrays.asList(
+            "ObjectCreated:PutObject", "ObjectCreated:PostObject");
+    private static final List<String> updateEventList = Arrays.asList(
+            "ObjectCreated:AppendObject");
+    private static final List<String> deleteEventList = Arrays.asList(
+            "ObjectRemoved:DeleteObject", "ObjectRemoved:DeleteObjects");
 
     @Override
     public void handleRequest(
@@ -61,7 +60,8 @@ public class EventHandler implements StreamRequestHandler {
             }
             fcLogger.info("Read object event success.");
         } catch(Exception ex) {
-            fcLogger.info(ex.getMessage());
+            fcLogger.error(ex.getMessage());
+            return;
         } finally{
             closeQuietly(streamReader, fcLogger);
         }
@@ -113,7 +113,7 @@ public class EventHandler implements StreamRequestHandler {
                     // You can put more fields according to your scenario
                     structuredDoc.put("title", fileName);
                     structuredDoc.put("content", fileContentBuilder.toString());
-                    structuredDoc.put("subject", String.format(docUrlFormat, bucketName, ossEndpoint, fileName));
+                    structuredDoc.put("subject", String.format(DOC_URL_FORMAT, bucketName, OSS_ENDPOINT, fileName));
 
                     if (addEventList.contains(eventName)) {
                         documentClient.add(structuredDoc);
@@ -122,7 +122,8 @@ public class EventHandler implements StreamRequestHandler {
                     }
                 }
             } catch (Exception ex) {
-                fcLogger.info(ex.getMessage());
+                fcLogger.error(ex.getMessage());
+                return;
             } finally {
                 closeQuietly(objectReader, fcLogger);
             }
@@ -133,27 +134,29 @@ public class EventHandler implements StreamRequestHandler {
          * Commit json docs string to open search
          */
         try {
-            OpenSearchResult osr = documentClient.commit(openSearchAppName, openSearchTableName);
+            OpenSearchResult osr = documentClient.commit(OPENSEARCH_APP_NAME, OPENSEARCH_TABLE_NAME);
             if(osr.getResult().equalsIgnoreCase("true")) {
                 fcLogger.info("OSS Object commit to OpenSearch success.");
             } else {
                 fcLogger.info("Fail to commit to OpenSearch.");
             }
         } catch (OpenSearchException ex) {
-            fcLogger.info(ex.getMessage());
+            fcLogger.error(ex.getMessage());
+            return;
         } catch (OpenSearchClientException ex) {
-            fcLogger.info(ex.getMessage());
+            fcLogger.error(ex.getMessage());
+            return;
         }
     }
 
     protected OSSClient getOSSClient(Context context) {
         Credentials creds = context.getExecutionCredentials();
         return new OSSClient(
-                ossEndpoint, creds.getAccessKeyId(), creds.getAccessKeySecret(), creds.getSecurityToken());
+                OSS_ENDPOINT, creds.getAccessKeyId(), creds.getAccessKeySecret(), creds.getSecurityToken());
     }
 
     protected DocumentClient getDocumentClient() {
-        OpenSearch openSearch = new OpenSearch(accessKeyId, accessKeySecret, openSearchHost);
+        OpenSearch openSearch = new OpenSearch(ACCESS_KEY_ID, ACCESS_KEY_SECRET, OPENSEARCH_HOST);
         OpenSearchClient serviceClient = new OpenSearchClient(openSearch);
         return new DocumentClient(serviceClient);
     }
@@ -164,7 +167,7 @@ public class EventHandler implements StreamRequestHandler {
                 reader.close();
             }
         } catch (Exception ex) {
-            fcLogger.info(ex.getMessage());
+            fcLogger.error(ex.getMessage());
         }
     }
 }
